@@ -1,12 +1,20 @@
 {
-  "name": "app",
+  "name": "PebbleApp",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node app.js"
   },
-  "author": "",
-  "license": "ISC"
+  "dependencies": {
+    "array-includes": "^3.0.2",
+    "body-parser": "^1.15.2",
+    "cfenv": "1.0.x",
+    "express": "4.13.x",
+    "node-rest-client": "^2.0.1",
+    "watson-developer-cloud": "^2.8.2"
+  },
+  "repository": {},
+  "engines": {
+    "node": "4.x"
+  }
 }
