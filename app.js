@@ -32,7 +32,7 @@ app.use(bodyParser.json());
 
 // FOR TESTING PURPOSES *\
 app.get('/', function(req, res) {
-    getActivityClassifier("I want to go biking on saturday", 40.7934, -77.8600, res);
+    getActivityClassifier("I want to go biking today", 40.7934, -77.8600, res);
 }) 
 
 function getActivityClassifier(text, latitude, longitude, res) {
@@ -203,7 +203,7 @@ function getWeatherInfo(locationKey, intent, res, date) {
                 totalLiquid: data[i].TotalLiquid.Value
             }
         
-            var date = new Date(data[i].EpochDateTime*1000);
+            var date = new Date((data[i].EpochDateTime-18000)*1000);
             forecast.time = {
                 seconds: date.getSeconds(),
                 minutes: date.getMinutes(),
@@ -373,8 +373,10 @@ function sendTopResultsToWatch(rankedResults, res) {
         } 
         else { 
             pebbleResult.time = rankedResults[i].time.hours}
-        
-        pebbleResult.timeString = String(pebbleResult.time % 12) + ":00 " + amPm;
+        if (pebbleResult.time == 12)
+            pebbleResult.timeString = String(pebbleResult.time) + ":00 " + amPm;
+        else
+            pebbleResult.timeString = String(pebbleResult.time % 12) + ":00" + amPm
         
         if (rankedResults[i].time.weekday == 0) 
             pebbleResult.day = 'Sunday';
