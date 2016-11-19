@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node app.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "array-includes": "^3.0.2",
     "body-parser": "^1.15.2",
     "cfenv": "1.0.x",
     "express": "4.13.x",
+    "fs": "0.0.1-security",
+    "google-auth-library": "^0.9.9",
+    "googleapis": "^14.2.0",
+    "json-fs-store": "^1.0.1",
     "node-rest-client": "^2.0.1",
     "watson-developer-cloud": "^2.8.2"
   },

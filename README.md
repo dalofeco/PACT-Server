@@ -1,5 +1,22 @@
-# PACT-Server
-A node.js server that servers as a back end for the Pebble PACT app. It allows the user to send a text request containing a natural language request for a specific physical activity in the next five days, and recieve back up to three ideal times for which the weather conditions are ideal.
-## Services Utilized:
-- IBM Watson: Natural Language Classifiers
-- AccuWeather API: Weather Forecasts
+
+     ,-----.,--.                  ,--. ,---.   ,--.,------.  ,------.
+    '  .--./|  | ,---. ,--.,--. ,-|  || o   \  |  ||  .-.  \ |  .---'
+    |  |    |  || .-. ||  ||  |' .-. |`..'  |  |  ||  |  \  :|  `--, 
+    '  '--'\|  |' '-' ''  ''  '\ `-' | .'  /   |  ||  '--'  /|  `---.
+     `-----'`--' `---'  `----'  `---'  `--'    `--'`-------' `------'
+    ----------------------------------------------------------------- 
+
+
+Welcome to your Node.js project on Cloud9 IDE!
+
+This chat example showcases how to use `socket.io` with a static `express` server.
+
+## Running the server
+
+1) Open `server.js` and start the app by clicking on the "Run" button in the top menu.
+
+2) Alternatively you can launch the app from the Terminal:
+
+    $ node server.js
+
+Once the server is running, open the project in the shape of 'https://projectname-username.c9users.io/'. As you enter your name, watch the Users list (on the left) update. Once you press Enter or Send, the message is shared with all connected clients.
