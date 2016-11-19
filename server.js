@@ -1,6 +1,6 @@
 // ***** CONSTANTS ***** \\
 // AccuWeather API Key
-const ACCUWEATHER_APIKEY =  "k8GCzfGSugLwsLoBLpzW5veMAoMmFzL8";
+const ACCUWEATHER_APIKEY =  "";
 
 // TimeZone Offset
 var TIMEZONE_OFFSET = -5; // FOR -5 EST daylight saving timezone
