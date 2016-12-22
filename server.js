@@ -1,13 +1,14 @@
 // ***** CONSTANTS ***** \\
-// AccuWeather API Key
-const ACCUWEATHER_APIKEY =  "";
 
 // TimeZone Offset
-var TIMEZONE_OFFSET = -5; // FOR -5 EST daylight saving timezone
+const TIMEZONE_OFFSET = -5; // FOR -5 EST daylight saving timezone
+
+process.env.TZ = 'America/New York'
 
 // ************************ \\
 // ******* MODULES ******** \\
 // ************************ \\
+
 // IBM Watson Natural Language Classifier
 var NaturalLanguageClassifierV1 = require('watson-developer-cloud/natural-language-classifier/v1');
 
@@ -16,9 +17,14 @@ var google = require('googleapis');
 var googleAuth = require('google-auth-library');
 var calendar = google.calendar('v3');
 
-
 // File Management
 var fs = require('fs');
+
+// API Keys
+const WUNDERGROUND_APIKEY = JSON.parse(fs.readFileSync('apikeys.json', 'utf8')).WUNDERGROUND_APIKEY;
+
+// Asynchronous Package
+var async = require('async');
 
 // Server Request Handling
 var express = require('express');
@@ -40,8 +46,12 @@ app.use(bodyParser.json());
 
 // **** END OF MODULES ***** //
 
+
+// ** SERVER REQUEST HANDLING ** \\
+
 app.get('/', function(req, res) {
-    getActivityClassifier("I want to play soccer wednesday night", 35.2008, 35.2999, res);
+    // initiateActivityRequest("I want to play soccer sunday at noon", 35.2008, 35.2999, res);
+    initiateActivityRequest("I want to play soccer tomorrow afternoon", 25.793436, -80.244739, res);
 }) 
 
 // Get request for browser testing of functionality
@@ -58,300 +68,11 @@ app.post('/activity', function(req, res) {
     var spokenText = clientData.text;
     var latitude = clientData.latitude;
     var longitude = clientData.longitude;
-    getActivityClassifier(spokenText, latitude, longitude, res);
+    initiateActivityRequest(spokenText, latitude, longitude, res);
     // res.send(JSON.stringify(["3:00 PM", "4:00 PM", "5:00 PM", "6:00 PM"]));
 });
 
-// *********************************************** \\
-// *** IBM WATSON NATURAL LANGUAGE CLASSIFIERS *** \\
-// *********************************************** \\
-
-function getActivityClassifier(text, latitude, longitude, res) {
- 
-    var natural_language_classifier = new NaturalLanguageClassifierV1({
-      username: '71e41afb-71f9-4bfb-9d07-e85fba2b2a2a',
-      password: 'hpD7yI6cW3At'
-    });
-     
-    natural_language_classifier.classify({
-      text: text,
-      classifier_id: '8aff06x106-nlc-13836' },
-      function(err, response) {
-        if (err)
-          console.log('error:', err);
-        else {
-            var intents = response.top_class.split(',');
-            getTimeOfDayClassifier(text, latitude, longitude, intents, res);
-        }
-    });
-    
-}
-
-function getTimeOfDayClassifier(text, latitude, longitude, intents, res) {
-    var natural_language_classifier = new NaturalLanguageClassifierV1({
-      username: '2e0fc033-ff15-476b-8f55-ae53aa4b1620',
-      password: 'Dl8vvqQA3TNg'
-    });
-     
-    natural_language_classifier.classify({
-      text: text,
-      classifier_id: '004a12x110-nlc-3402' },
-      function(err, response) {
-        if (err)
-          console.log('error:', err);
-        else {
-            var timeClass = response.top_class;
-            var timeOfDay = null;
-            var acceptableClasses = ['Morning', 'Afternoon', 'Evening', 'Now']
-            
-            if (includes(acceptableClasses, response.top_class)) {
-                for (var i = 0; i < acceptableClasses.length; i++) {
-                    if (response.classes[i].confidence > 0.70) {
-                        if (timeClass == 'Now') {
-                            var currentDate = new Date(new Date().getTime() + TIMEZONE_OFFSET * 3600 * 1000); // Yes, kinda sketchy, but gets current time zone with offset
-                            timeOfDay = currentDate.getHours();
-                            console.log(timeOfDay);
-                        }
-                        else if (timeClass == 'Morning')
-                            timeOfDay = 9;
-                        else if (timeClass == 'Afternoon')
-                            timeOfDay = 14;
-                        else if (timeClass == 'Evening')
-                            timeOfDay = 19;
-                        else {
-                            console.log("Something went really wrong; time of day class is not compatible.")
-                            timeOfDay = 12;
-                        }
-                    }
-                }
-            }
-            
-            getTimeClassifier(text, latitude, longitude, intents, res, timeOfDay);
-        }
-    });
-}
-
-function getTimeClassifier(text, latitude, longitude, intents, res, timeOfDay) {
-    
-    var natural_language_classifier = new NaturalLanguageClassifierV1({
-      username: '074be669-5aa9-422a-a100-da2283315fae',
-      password: 'EVVCeYLu7CTd'
-    });
-     
-    natural_language_classifier.classify({
-      text: text,
-      classifier_id: 'f48968x109-nlc-5074' },
-      function(err, response) {
-        if (err)
-          console.log('error:', err);
-        else {
-            var date = response.top_class;
-            getLocationKey(latitude, longitude, intents, date, res, timeOfDay);
-        }
-    });
-
-}
-
-// Function that gets location key for long, lat pair and calls getWeatherInfo with key
-function getLocationKey(latitude, longitude, intent, date, res, timeOfDay) {
-    
-    console.log(date)
-    console.log(intent)
-    console.log(timeOfDay)
-    
-    /* Sends the index html page to the user */
-    var locationKey = 0;
-    var locationRequestURL = "http://api.accuweather.com/locations/v1/cities/geoposition/search.json?q=<LATLONG>&apikey=<APIKEY>&details=true&toplevel=false"
-    // Construct formatted latitude longitude parameter string
-    var latLongString = String(latitude) + ',' + String(longitude);
-    
-    // Replace location placeholder with parameter in URL
-    locationRequestURL = locationRequestURL.replace(/<LATLONG>/, latLongString)
-    locationRequestURL = locationRequestURL.replace(/<APIKEY>/, ACCUWEATHER_APIKEY)
-
-    console.log(locationRequestURL);
-    
-    // Send request to AccuWeather API
-    client.get(locationRequestURL, function(data, response) {
-        // Check for API authorization issues
-        if (response.statusCode == 403) {
-            console.log('Accuweather API Authorization Failure');
-            return
-        }
-        // Get location key from JSON object
-        locationKey = data.Key;
-        getWeatherInfo(locationKey, intent, res, date, timeOfDay);
-    });
-}
-
-function getWeatherInfo(locationKey, intent, res, date, timeOfDay) {
-    
-    var weatherForecastURL = "http://api.accuweather.com/forecasts/v1/hourly/<TIME>/<LATLONG>.json?apikey=<APIKEY>&details=true&metric=false";
-    var timeRequest = '';
-    
-    weatherForecastURL = weatherForecastURL.replace(/<LATLONG>/, String(locationKey));
-    weatherForecastURL = weatherForecastURL.replace(/<APIKEY>/, ACCUWEATHER_APIKEY);
-    
-    var dateObject = new Date(new Date().getTime() + TIMEZONE_OFFSET * 3600 * 1000); // Yes, kinda sketchy, but gets current time zone with offset
-                                                    //  offset (-12-12) (seconds in hr) * (1000) -> milliseconds
-    var todayDate = dateObject.getDate();           //gets the day of month
-    var dayOfWeek = dateObject.getDay();            //gets the day of week 0-6
-    var requestDate;
-            
-    //assigning day of week to each possible requested date string
-    if(date == "tomorrow"){
-        requestDate = (dayOfWeek + 1) % 7;
-    }
-    if(date == "today"){
-        requestDate = dayOfWeek;
-    }
-    if(date == "Sunday"){
-        requestDate = 0;
-    }
-    if(date == "Monday"){
-        requestDate = 1;
-    }
-    if(date == "Tuesday"){
-        requestDate = 2;
-    }
-    if(date == "Wednesday"){
-        requestDate = 3;
-    }
-    if(date == "Thursday"){
-        requestDate = 4;
-    }
-    if(date == "Friday"){
-        requestDate = 5;
-    }
-    if(date == "Saturday"){
-        requestDate = 6;
-    }
-    console.log(requestDate);
-
-    //calculating the date difference of the week 
-    var dateDiff;
-    if (requestDate != null) {
-        // Find the difference b/w days
-        dateDiff = requestDate - dayOfWeek;
-        if (dateDiff < 0)
-            dateDiff += 7;
-    } else
-        console.log("requestDate is null: line ~203")
-
-    //calculating the day that the user wants to schedule an activity
-    var newDate = dateDiff + todayDate;
-
-    //finding out how long to request weather date for, specifically how many hours of weather will be needed
-    var APIHOURS;
-    if(dateDiff == 0) { 
-        APIHOURS = 24;
-        
-    } else if(dateDiff == 1 || dateDiff == 2) { 
-        APIHOURS = 72;
-        
-    } else if (dateDiff == 3 || dateDiff == 4 || dateDiff == 5) {
-        APIHOURS = 120;
-        
-    } else {
-        // More than five days in advance is not supported
-        res.send([{timeString: "You can only schedule up to five days in advance!", time: -1}]);
-        return;
-    }
-
-    //appending the URL to contain correct total hours needed
-    weatherForecastURL = weatherForecastURL.replace(/<TIME>/, String(APIHOURS) + 'hour')
-    console.log(weatherForecastURL);
-    client.get(weatherForecastURL, function(data, response) {
-        var hourlyForecast = [];
-        if (response.statusCode == 403) {
-            console.log('Accuweather API Authorization Failure');
-            return
-        }
-        
-        // Store all the fetched data
-        for (var i = 0; i < data.length; i++) {
-            var forecast = {}
-            forecast.temperature = data[i].Temperature.Value;
-            forecast.windSpeed = data[i].Wind.Speed.Value;
-            forecast.realFeel = data[i].RealFeelTemperature.Value;
-            forecast.seenVisibility = data[i].Visibility.Value;
-            forecast.probablities = {
-                snow: data[i].SnowProbability,
-                rain: data[i].RainProbability,
-                ice: data[i].IceProbability,
-                precipitation: data[i].PrecipitationProbability
-            };
-            forecast.onGround = {
-                snow: data[i].Snow.Value,
-                ice: data[i].Ice.Value,
-                rain: data[i].Rain.Value,
-                totalLiquid: data[i].TotalLiquid.Value
-            }
-        
-            var date = new Date((data[i].EpochDateTime-18000)*1000);
-            forecast.time = {
-                seconds: date.getSeconds(),
-                minutes: date.getMinutes(),
-                hours: date.getHours(),
-                weekday: date.getDay(),
-                monthday: date.getDate(),
-                year: date.getFullYear(),
-                month: date.getMonth()
-            } 
-            //Checking to see when the needed date is in array. If so then capture each hour forecast in that day
-            if(forecast.time.monthday == newDate){
-                hourlyForecast.push(forecast);
-            }
-        } // finished fetching data
-        
-        
-        // Define function to validate forecasts
-        function validForecast(forecast, res) {
-            // Assume forecast is valid 
-            var returnValue = true;
-            
-            // If empty, not valid
-            if (forecast.length == 0) {
-               returnValue = false;
-            // If time is -1, it is an error message, so send back
-            } else if (forecast.time == -1) {
-               res.send(JSON.stringify(forecast));
-               returnValue = false;
-            }
-            return returnValue;
-        }
-        
-            
-        //SUMMER
-        var sForecast = summerForecast(hourlyForecast, intent);
-        if (!validForecast(sForecast, res)) {
-           sForecast = hourlyForecast; // fill in with all original values
-        }
-    
-        // WINTER
-        var wsForecast = winterForecast(sForecast, intent);
-        if (!validForecast(wsForecast, res)) {
-           wsForecast = sForecast; // fill in with all previous values
-        }
-       
-        // VISIBILITY
-        var vwsForecast = visibilityForecast(wsForecast, intent);
-        if (!validForecast(vwsForecast, res)) {
-           vwsForecast = wsForecast; // fill in with all previous values
-        }
-       
-        // TIME (Doesn''t need checking, always returns all elements)
-        var tvwsForecast = timeRank(vwsForecast, timeOfDay);
-       
-        // Sort the forecasts with rankings
-        var rankedForecasts = sortThis(tvwsForecast);
-        
-        // Send the top results to pebble watch
-        sendTopResults(rankedForecasts, res);
-    });
-}
-
-// Send results to the watch via HTTP Request
+// Send results to the Pebble watch via HTTP Request
 function sendTopResults(rankedResults, res) {
     // Send X amount of results back to the watch
     var numOfResults = 3
@@ -402,9 +123,286 @@ function sendTopResults(rankedResults, res) {
     res.send(JSON.stringify(results))
 }
 
+function initiateActivityRequest(text, latitude, longitude, res) {    
+    async.waterfall([
+        function(callback) {
+            var intent = getActivityClassifier(text, callback);
+        },
+        function(intent, callback) {
+            var timeOfDay = getTimeOfDayClassifier(text, intent, callback);
+        },
+        function(intent, timeOfDay, callback) {
+            var date = getTimeClassifier(text, intent, timeOfDay, callback);
+        },        
+        function(intent, timeOfDay, date, callback) {
+            var weatherForecastURL = generateWeatherRequestURL(latitude, longitude, date);
+            callback(null, intent, timeOfDay, weatherForecastURL);
+        },
+        function(intent, timeOfDay, weatherForecastURL, callback) {
+            client.get(weatherForecastURL, function(data, response) {
+                var hourlyForecast = [];
+                if (response.statusCode == 403) {
+                    console.log('Wunderground API Authorization Failure');
+                    return
+                }
+
+                // Store all the fetched data
+                for (var i = 0; i < data.hourly_forecast.length; i++) {
+                    var forecast = {}
+                    forecast.temperature = data.hourly_forecast[i].temp.metric;
+                    forecast.feelsLike = data.hourly_forecast[i].feelslike.metric;
+
+                    forecast.heatIndex = data.hourly_forecast[i].heatindex.metric;
+                    forecast.windChill = data.hourly_forecast[i].windchill.metric;
+
+                    forecast.windSpeed = data.hourly_forecast[i].wspd.metric;
+                    forecast.humidity = data.hourly_forecast[i].humidity; // in percentage
+                    forecast.uvi = data.hourly_forecast[i].uvi; // ultra violet index
+                    forecast.qpf = data.hourly_forecast[i].qpf.metric; // quantitative precipitaiton forecast 
+                    forecast.dewpoint = data.hourly_forecast[i].dewpoint.metric;
+                    forecast.snow = data.hourly_forecast[i].snow.metric;
+                    forecast.mslp = data.hourly_forecast[i].mslp.metric;
+                    forecast.pop = data.hourly_forecast[i].pop;
+
+
+                    var date = new Date();
+                    forecast.time = {
+                        seconds: date.getSeconds(),
+                        minutes: date.getMinutes(),
+                        hours: date.getHours(),
+                        weekday: date.getDay(),
+                        monthday: date.getDate(),
+                        year: date.getFullYear(),
+                        month: date.getMonth()
+                    } 
+
+                    hourlyForecast.push(forecast);  
+                }
+                console.log(hourlyForecast);
+
+                callback(null, intent, timeOfDay, hourlyForecast);
+            }); // finished fetching data
+        },
+        function(intent, timeOfDay, hourlyForecast, callback) {
+            var sortedForecast = rankAndSortForecast(hourlyForecast, intent, timeOfDay);
+            console.log(sortedForecast);
+            callback(null, sortedForecast);
+        },
+        function(sortedForecast, callback) {
+            sendTopResults(sortedForecast, res);
+            callback(null, 'Success!');
+        }
+    ], function(err, result) {
+        if (err)
+            res.send(JSON.stringify(err));
+        else
+            console.log(result);
+    });
+}
+
+// *********************************************** \\
+// *** IBM WATSON NATURAL LANGUAGE CLASSIFIERS *** \\
+// *********************************************** \\
+
+function getActivityClassifier(text, callback) {
+ 
+    var natural_language_classifier = new NaturalLanguageClassifierV1({
+      username: '71e41afb-71f9-4bfb-9d07-e85fba2b2a2a',
+      password: 'hpD7yI6cW3At'
+    });
+     
+    natural_language_classifier.classify({
+      text: text,
+      classifier_id: '8aff06x106-nlc-13836' },
+      function(err, response) {
+        if (err)
+          console.log('error:', err);
+        else {
+            // Return the intents 
+            var intents = response.top_class.split(',');
+            callback(null, intents);
+        }
+    });
+    
+}
+
+function getTimeOfDayClassifier(text, intents, callback) {
+    var natural_language_classifier = new NaturalLanguageClassifierV1({
+      username: '2e0fc033-ff15-476b-8f55-ae53aa4b1620',
+      password: 'Dl8vvqQA3TNg'
+    });
+     
+    natural_language_classifier.classify({
+      text: text,
+      classifier_id: '004a12x110-nlc-3402' },
+      function(err, response) {
+        if (err)
+          console.log('error:', err);
+        else {
+            var timeClass = response.top_class;
+            var timeOfDay = null;
+            var acceptableClasses = ['Morning', 'Afternoon', 'Evening', 'Now']
+            
+            if (includes(acceptableClasses, response.top_class)) {
+                for (var i = 0; i < acceptableClasses.length; i++) {
+                    if (response.classes[i].confidence > 0.70) {
+                        if (timeClass == 'Now') {
+                            var currentDate = new Date(new Date().getTime() + TIMEZONE_OFFSET * 3600 * 1000); // Yes, kinda sketchy, but gets current time zone with offset
+                            timeOfDay = currentDate.getHours();
+                            console.log(timeOfDay);
+                        }
+                        else if (timeClass == 'Morning')
+                            timeOfDay = 9;
+                        else if (timeClass == 'Afternoon')
+                            timeOfDay = 14;
+                        else if (timeClass == 'Evening')
+                            timeOfDay = 19;
+                        else {
+                            console.log("Something went really wrong; time of day class is not compatible.")
+                            timeOfDay = 12;
+                        }
+                    }
+                }
+            }
+            // Return the time of day
+            callback(null, intents, timeOfDay);
+        }
+    });
+}
+
+function getTimeClassifier(text, intents, timeOfDay, callback) {
+    
+    var natural_language_classifier = new NaturalLanguageClassifierV1({
+      username: '074be669-5aa9-422a-a100-da2283315fae',
+      password: 'EVVCeYLu7CTd'
+    });
+     
+    natural_language_classifier.classify({
+      text: text,
+      classifier_id: 'f48968x109-nlc-5074' },
+      function(err, response) {
+        if (err)
+          console.log('error:', err);
+        else {
+            // Return the date
+            var date = response.top_class;
+            callback(null, intents, timeOfDay, date);
+        }
+    });
+
+}
+
+// ************************************ \\
+// **** WUNDERGROUND Data Fetching **** \\
+// ************************************ \\
+
+function generateWeatherRequestURL(latitude, longitude, date) {
+    
+   var weatherForecastURL = "http://api.wunderground.com/api/<APIKEY>/hourly10day/q/<LATITUDE>,<LONGITUDE>.json";
+    
+    weatherForecastURL = weatherForecastURL.replace(/<LATITUDE>/, String(latitude));
+    weatherForecastURL = weatherForecastURL.replace(/<LONGITUDE>/, String(longitude));
+    weatherForecastURL = weatherForecastURL.replace(/<APIKEY>/, WUNDERGROUND_APIKEY);
+    
+    var dateObject = new Date(new Date().getTime() + TIMEZONE_OFFSET * 3600 * 1000); // Yes, kinda sketchy, but gets current time zone with offset
+                                                    //  offset (-12-12) (seconds in hr) * (1000) -> milliseconds
+    var todayDate = dateObject.getDate();           //gets the day of month
+    var dayOfWeek = dateObject.getDay();            //gets the day of week 0-6
+    var requestDate;
+            
+    //assigning day of week to each possible requested date string
+    if(date == "tomorrow"){
+        requestDate = (dayOfWeek + 1) % 7;
+    }
+    if(date == "today"){
+        requestDate = dayOfWeek;
+    }
+    if(date == "Sunday"){
+        requestDate = 0;
+    }
+    if(date == "Monday"){
+        requestDate = 1;
+    }
+    if(date == "Tuesday"){
+        requestDate = 2;
+    }
+    if(date == "Wednesday"){
+        requestDate = 3;
+    }
+    if(date == "Thursday"){
+        requestDate = 4;
+    }
+    if(date == "Friday"){
+        requestDate = 5;
+    }
+    if(date == "Saturday"){
+        requestDate = 6;
+    }
+    console.log(requestDate);
+
+    //calculating the date difference of the week 
+    var dateDiff;
+    if (requestDate != null) {
+        // Find the difference b/w days
+        dateDiff = requestDate - dayOfWeek;
+        if (dateDiff < 0)
+            dateDiff += 7;
+    } else
+        console.log("requestDate is null: line ~231")
+
+    //calculating the day that the user wants to schedule an activity
+    var newDate = dateDiff + todayDate;
+
+    console.log(weatherForecastURL);
+    
+    return weatherForecastURL;
+}
+
 // ***************************************** \\
 // **** RANKING and FORECASTING METHODS **** \\
 // ***************************************** \\
+
+// Define function to validate forecasts
+function validForecast(forecast) {
+    // Assume forecast is valid 
+    var returnValue = true;
+
+    // If empty, not valid
+    if (forecast.length == 0) {
+       returnValue = false;
+    // If time is -1, it is an error message, throw it
+    } else if (forecast.time == -1) {
+       throw new Error(forecast);
+       returnValue = false;
+    }
+    return returnValue;
+}
+
+function rankAndSortForecast(hourlyForecast, intent, timeOfDay) {
+    //SUMMER
+    var sForecast = summerForecast(hourlyForecast, intent);
+    if (!validForecast(sForecast)) {
+       sForecast = hourlyForecast; // fill in with all original values
+    }
+
+    // WINTER
+    var wsForecast = winterForecast(sForecast, intent);
+    if (!validForecast(wsForecast)) {
+       wsForecast = sForecast; // fill in with all previous values
+    }
+
+    // VISIBILITY
+    var vwsForecast = visibilityForecast(wsForecast, intent);
+    if (!validForecast(vwsForecast)) {
+       vwsForecast = wsForecast; // fill in with all previous values
+    }
+
+    // TIME (Doesn''t need checking, always returns all elements)
+    var tvwsForecast = timeRank(vwsForecast, timeOfDay);
+
+    // Sort the forecasts with rankings and return
+    return sortThis(tvwsForecast);
+}
 
 function sortThis(acceptableForecast) {
     
@@ -470,44 +468,53 @@ function sortThis(acceptableForecast) {
     return acceptableForecast;
 }
 
+
+function computeVisibility(forecast) {
+    var visibility1 = 0.45 * forecast.mslp - 447;
+    var visibility2 = 1.13 * (forecast.temperature - forecast.dewpoint) - 1.15;
+    
+    return ((0.545 * visibility1) + (0.455 * visibility2));
+}
+
 function visibilityForecast(forecastsToUse, intent) {
     
-        var VIS = "Bad visibility all day. Maybe choose another activity."
-        var WIND = "High winds all day. Maybe choose another activity."
-        var vis = 0
-        var wind = 0;
-        var acceptableForecast = []
+        var BAD_VISIBILITY = "Bad visibility all day. Maybe choose another activity."
+        var BAD_WIND = "High winds all day. Maybe choose another activity."
+        var visibilityCheck = false;
+        var windCheck = false;
+        var acceptableForecast = [];
         
         if (includes(intent, 'visibility')) {
             // for sports that need good visibility
             for (var i = 0; i < forecastsToUse.length; i++) {
                 // Check within acceptable time 
                 if (forecastsToUse[i].time.hours > 7 && forecastsToUse[i].time.hours <= 22) {
-                    //Checking for visibility
-                    if (forecastsToUse[i].seenVisibility > 1){
-                        vis++
+                    // Compute visibility in miles
+                    var visibility = computeVisibility(forecastsToUse[i]);
+                    if (visibility > 1){
+                        visibilityCheck = true;
                        //Checking for extreme winds
                         if (forecastsToUse[i].windSpeed < 10){
-                            wind++;
+                            windCheck = true;
                             if (!includes(acceptableForecast, forecastsToUse[i]))
                                 acceptableForecast.push(forecastsToUse[i]);
                         }   
                     }  
                 }   
             }
-            if (vis == 0){
+            if (!visibilityCheck){
                 var result = []
                 var pebbleResult = {}
                 pebbleResult.time = -1
-                pebbleResult.timeString = VIS
+                pebbleResult.timeString = BAD_VISIBILITY;
                 result.push(pebbleResult)
                 acceptableForecast = result;
             }
-            else if (wind == 0){
+            else if (!windCheck){
                 var result = []
                 var pebbleResult = {}
                 pebbleResult.time = -1
-                pebbleResult.timeString = WIND
+                pebbleResult.timeString = BAD_WIND;
                 result.push(pebbleResult)
                 acceptableForecast = result
             } else {
@@ -515,136 +522,6 @@ function visibilityForecast(forecastsToUse, intent) {
             }
         }
         return acceptableForecast
-}
-
-function winterRank(acceptableForecast) {
-    var IDEAL_TEMP = 28
-    var MAX_TEMP_DIFFERENCE = 13
-    
-    // Calculate the weights utilized for the sort algorithm
-    for (var i = 0; i < acceptableForecast.length; i++) {
-        var tempWeight = 0.5 * (Math.abs(acceptableForecast[i].temperature - IDEAL_TEMP))/MAX_TEMP_DIFFERENCE
-        var snowChangeWeight = 0.5 * (Math.abs(100-acceptableForecast[i].probablities.snow))/100;
-        
-        acceptableForecast[i]["winterRank"] = tempWeight + snowChangeWeight;
-        
-        if (acceptableForecast[i].winterRank > 1)
-            console.log("Something is very wrong.");
-    }
-    return acceptableForecast;
-}
-
-function winterForecast(hourlyForecast, intent) {
-        var NOSNOW = "Not Enough Info."
-        var TEMP = "Temperature is not optimal for this activity today."
-        var noSnow = 0; var temp = 0;
-        var acceptableForecast = []
-        
-        if (includes(intent, 'winter')){
-            //consider temp, snow, snow probability, wind, windchill
-            for (var i = 0; i < hourlyForecast.length; i++) {
-                // Check within acceptable time 
-                if (hourlyForecast[i].time.hours > 7 && hourlyForecast[i].time.hours <= 22) {
-                    //Check for acceptable cold temperature
-                    if (hourlyForecast[i].temperature < 40 && hourlyForecast[i].temperature > 20){
-                        temp++
-                        //Check for snowfall in inches
-                        if (hourlyForecast[i].onGround.snow > 3){
-                            noSnow++
-                            //Check for wind chill
-                            if (hourlyForecast[i].realFeel < 40 && hourlyForecast[i].realFeel > 15) {
-                                acceptableForecast.push(hourlyForecast[i]);
-                            }   
-                        }   
-                    }   
-                }  
-            }
-
-            if (!noSnow){
-                var result = []
-                var pebbleResult = {}
-                pebbleResult.time = -1
-                pebbleResult.timeString = NOSNOW
-                result.push(pebbleResult)
-                acceptableForecast = result;
-                
-            } else if(!temp){
-                var result = []
-                var pebbleResult = {}
-                pebbleResult.time = -1
-                pebbleResult.timeString = TEMP
-                result.push(pebbleResult)
-                acceptableForecast = result;
-            } else {
-                acceptableForecast = winterRank(acceptableForecast);
-            }
-        }
-    return acceptableForecast
-}
-
-
-function summerForecast(hourlyForecast, intent) {
-        var RAIN = "There is a high chance of rain all day."
-        var TEMP = "Extreme temperatures all day long. Exercise caution."
-        var noRain = 0; 
-        var extremeTemp = 0;
-        var acceptableForecast = []
-        
-        if (includes(intent, 'summer')) {
-            
-            for (var i = 0; i < hourlyForecast.length; i++) {
-                // Check within acceptable time 
-                if (hourlyForecast[i].time.hours > 3 && hourlyForecast[i].time.hours <= 23) {
-                    // Check hours with no rain probablities
-                    if (hourlyForecast[i].probablities.rain < 37) {
-                        noRain++
-                        // Check temperature min and max
-                        if (hourlyForecast[i].temperature > 40 && hourlyForecast[i].temperature < 90) {
-                            extremeTemp++
-                            acceptableForecast.push(hourlyForecast[i])
-                        }
-                    }
-                }
-            }
-            
-            if (noRain == 0){
-                var result = []
-                var pebbleResult = {}
-                pebbleResult.time = -1
-                pebbleResult.timeString = RAIN
-                result.push(pebbleResult)
-                acceptableForecast = result;
-            }
-            else if (extremeTemp == 0){
-                var result = []
-                var pebbleResult = {}
-                pebbleResult.time = -1
-                pebbleResult.timeString = TEMP
-                result.push(pebbleResult)
-                acceptableForecast = result;
-            } else {
-                acceptableForecast = summerRank(acceptableForecast);
-            }
-        }
-        
-    return acceptableForecast;
-}
-
-function summerRank(acceptableForecast) {
-    var IDEAL_RAIN_PERC = 37
-    var MAX_TEMP_DIFFERENCE = 25
-    
-    // Calculate the weights utilized for the sort algorithm
-    for (var i = 0; i < acceptableForecast.length; i++) {
-        var rainWeight = 0.5 * (Math.abs(acceptableForecast[i].probablities.rain/ IDEAL_RAIN_PERC));
-        var tempWeight = 0.5 * (Math.abs(acceptableForecast[i].temperature - 65))/MAX_TEMP_DIFFERENCE;
-        
-        acceptableForecast[i].summerRank = tempWeight + rainWeight;
-        
-        if (acceptableForecast[i].summerRank > 1)
-            console.log("Something is very wrong.");
-    }
-    return acceptableForecast;
 }
 
 function visibilityRank(acceptableForecast) {
@@ -662,6 +539,137 @@ function visibilityRank(acceptableForecast) {
             console.log("Something is very wrong.");
     }
     
+    return acceptableForecast;
+}
+
+
+function winterRank(acceptableForecast) {
+    var IDEAL_TEMP = 28
+    var MAX_TEMP_DIFFERENCE = 13
+    
+    // Calculate the weights utilized for the sort algorithm
+    for (var i = 0; i < acceptableForecast.length; i++) {
+        var tempWeight = 0.5 * (Math.abs(acceptableForecast[i].temperature - IDEAL_TEMP))/MAX_TEMP_DIFFERENCE
+        var snowChangeWeight = 0.5 * (Math.abs(100-acceptableForecast[i].snow))/100;
+        
+        acceptableForecast[i]["winterRank"] = tempWeight + snowChangeWeight;
+        
+        if (acceptableForecast[i].winterRank > 1)
+            console.log("Something is very wrong.");
+    }
+    return acceptableForecast;
+}
+
+function winterForecast(hourlyForecast, intent) {
+        var NOSNOW = "Not Enough Snow"
+        var BAD_TEMP = "Temperature is not optimal for this activity today."
+        var snowCheck = false;
+        var tempCheck = false;
+        var acceptableForecast = []
+        
+        if (includes(intent, 'winter')){
+            //consider temp, snow, snow probability, wind, windchill
+            for (var i = 0; i < hourlyForecast.length; i++) {
+                // Check within acceptable time 
+                if (hourlyForecast[i].time.hours > 7 && hourlyForecast[i].time.hours <= 22) {
+                    //Check for acceptable cold temperature
+                    if (hourlyForecast[i].temperature < 40 && hourlyForecast[i].temperature > 20){
+                        tempCheck = true;
+                        //Check for snowfall in mm
+                        // if (hourlyForecast[i].snow > 3) {
+                            snowCheck = true;
+                            // Check for wind chill
+                            if (hourlyForecast[i].feelsLike < 40 && hourlyForecast[i].feelsLike > 15) {
+                                acceptableForecast.push(hourlyForecast[i]);
+                            }   
+                        // }   
+                    }   
+                }  
+            }
+
+            if (!snowCheck){
+                var result = []
+                var pebbleResult = {}
+                pebbleResult.time = -1
+                pebbleResult.timeString = NOSNOW
+                result.push(pebbleResult)
+                acceptableForecast = result;
+                
+            } else if(!tempCheck){
+                var result = []
+                var pebbleResult = {}
+                pebbleResult.time = -1
+                pebbleResult.timeString = TEMP
+                result.push(pebbleResult)
+                acceptableForecast = result;
+            } else {
+                acceptableForecast = winterRank(acceptableForecast);
+            }
+        }
+    return acceptableForecast
+}
+
+function summerForecast(hourlyForecast, intent) {
+        var PRECIPITATION = "There is a high chance of precipitation all day."
+        var TEMP = "Extreme temperatures all day long. Exercise with caution."
+        var precipitationCheck = false; 
+        var extremeTempCheck = false;
+        var acceptableForecast = []
+        
+        if (includes(intent, 'summer')) {
+            
+            for (var i = 0; i < hourlyForecast.length; i++) {
+                // Check within acceptable time 
+                if (hourlyForecast[i].time.hours > 3 && hourlyForecast[i].time.hours <= 23) {
+                    // Check hours with no rain probablities
+                    if (hourlyForecast[i].pop < 35) {
+                        precipitationCheck = true;
+                        // Check temperature min and max
+                        if (hourlyForecast[i].temperature > 15 && hourlyForecast[i].temperature < 30) {
+                            extremeTempCheck = true;
+                            acceptableForecast.push(hourlyForecast[i])
+                        }
+                    }
+                }
+            }
+            
+            if (!precipitationCheck){
+                var result = []
+                var pebbleResult = {}
+                pebbleResult.time = -1
+                pebbleResult.timeString = PRECIPITATION;
+                result.push(pebbleResult)
+                acceptableForecast = result;
+            }
+            else if (!extremeTempCheck){
+                var result = []
+                var pebbleResult = {}
+                pebbleResult.time = -1
+                pebbleResult.timeString = TEMP;
+                result.push(pebbleResult)
+                acceptableForecast = result;
+            } else {
+                acceptableForecast = summerRank(acceptableForecast);
+            }
+        }
+        
+    return acceptableForecast;
+}
+
+function summerRank(acceptableForecast) {
+    var IDEAL_PRECIPITATION_PERC = 37
+    var MAX_TEMP_DIFFERENCE = 25
+    
+    // Calculate the weights utilized for the sort algorithm
+    for (var i = 0; i < acceptableForecast.length; i++) {
+        var rainWeight = 0.5 * (Math.abs(acceptableForecast[i].pop/ IDEAL_PRECIPITATION_PERC));
+        var tempWeight = 0.5 * (Math.abs(acceptableForecast[i].temperature - 65))/MAX_TEMP_DIFFERENCE;
+        
+        acceptableForecast[i].summerRank = tempWeight + rainWeight;
+        
+        if (acceptableForecast[i].summerRank > 1)
+            console.log("Something is very wrong.");
+    }
     return acceptableForecast;
 }
 
@@ -683,7 +691,7 @@ loadClients();
 
 // Load client info from file store
 function loadClients() {
-    fs.readFile('../.credentials/clients.json', function(err, data) {
+    fs.readFile('.credentials/clients.json', function(err, data) {
         if (err)
             console.log(err)
         else if (data != '')
@@ -693,7 +701,7 @@ function loadClients() {
 
 // Save client info to file store
 function saveClients() {
-    fs.writeFile('../.credentials/clients.json', JSON.stringify(CLIENTS), function(err) {
+    fs.writeFile('.credentials/clients.json', JSON.stringify(CLIENTS), function(err) {
         if (err)
             console.log(err);
         else 
@@ -711,6 +719,7 @@ app.get('/genID', function(req, res) {
     var id = generateNewPactID();
     res.send(id);
 });
+
 
 function generateNewPactID(res) {
 // Generates a unique pact ID and adds it to pending ids (for user registration)

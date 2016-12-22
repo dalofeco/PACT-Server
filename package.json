@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "array-includes": "^3.0.2",
+    "async": "^2.1.4",
     "body-parser": "^1.15.2",
     "cfenv": "1.0.x",
     "express": "4.13.x",
