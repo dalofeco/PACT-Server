@@ -59,7 +59,7 @@ app.get('/activ', function(req, res) {
     var intent = req.query.intent;
     var latitude = req.query.latitude;
     var longitude = req.query.longitude;
-    getActivityClassifier(intent, latitude, longitude, res);
+    initiateActivityRequest(intent, latitude, longitude, res);
 });
 
 // Handle POST request to schedule activity
@@ -136,9 +136,9 @@ function initiateActivityRequest(text, latitude, longitude, res) {
         },        
         function(intent, timeOfDay, date, callback) {
             var weatherForecastURL = generateWeatherRequestURL(latitude, longitude, date);
-            callback(null, intent, timeOfDay, weatherForecastURL);
+            callback(null, intent, timeOfDay, date, weatherForecastURL);
         },
-        function(intent, timeOfDay, weatherForecastURL, callback) {
+        function(intent, timeOfDay, date, weatherForecastURL, callback) {
             client.get(weatherForecastURL, function(data, response) {
                 var hourlyForecast = [];
                 if (response.statusCode == 403) {
@@ -165,20 +165,66 @@ function initiateActivityRequest(text, latitude, longitude, res) {
                     forecast.pop = data.hourly_forecast[i].pop;
 
 
-                    var date = new Date();
                     forecast.time = {
-                        seconds: date.getSeconds(),
-                        minutes: date.getMinutes(),
-                        hours: date.getHours(),
-                        weekday: date.getDay(),
-                        monthday: date.getDate(),
-                        year: date.getFullYear(),
-                        month: date.getMonth()
+                        seconds: data.hourly_forecast[i].FCTTIME.sec,
+                        minutes: data.hourly_forecast[i].FCTTIME.min,
+                        hours: data.hourly_forecast[i].FCTTIME.hour,
+                        monthday: data.hourly_forecast[i].FCTTIME.mday,
+                        year: data.hourly_forecast[i].FCTTIME.year,
+                        month: data.hourly_forecast[i].FCTTIME.mon,
+                        weekday: data.hourly_forecast[i].FCTTIME.weekday_name
                     } 
+                    
+                    var dateObject = new Date();
+                    var todayDate = dateObject.getDate();           //gets the day of month
+                    var dayOfWeek = dateObject.getDay();            //gets the day of week 0-6
+                    var requestDate;
 
-                    hourlyForecast.push(forecast);  
+                    //assigning day of week to each possible requested date string
+                    if(date == "tomorrow") {
+                        requestDate = (dayOfWeek + 1) % 7;
+                    }
+                    else if(date == "today") {
+                        requestDate = dayOfWeek;
+                    }
+                    else if(date == "Sunday") {
+                        requestDate = 0;
+                    }
+                    else if(date == "Monday") {
+                        requestDate = 1;
+                    }
+                    else if(date == "Tuesday") {
+                        requestDate = 2;
+                    }
+                    else if(date == "Wednesday") {
+                        requestDate = 3;
+                    }
+                    else if(date == "Thursday") {
+                        requestDate = 4;
+                    }
+                    else if(date == "Friday") {
+                        requestDate = 5;
+                    }
+                    else if(date == "Saturday") {
+                        requestDate = 6;
+                    }
+
+                    //calculating the date difference of the week 
+                    var dateDiff;
+                    if (requestDate != null) {
+                        // Find the difference b/w days
+                        dateDiff = requestDate - dayOfWeek;
+                        if (dateDiff < 0)
+                            dateDiff += 7;
+                    } else
+                        console.log("requestDate is null: line ~231")
+
+                    //calculating the day that the user wants to schedule an activity
+                    var newDate = dateDiff + todayDate;
+                    
+                    if (forecast.time.monthday == newDate)
+                        hourlyForecast.push(forecast);  
                 }
-                console.log(hourlyForecast);
 
                 callback(null, intent, timeOfDay, hourlyForecast);
             }); // finished fetching data
@@ -303,55 +349,6 @@ function generateWeatherRequestURL(latitude, longitude, date) {
     weatherForecastURL = weatherForecastURL.replace(/<LATITUDE>/, String(latitude));
     weatherForecastURL = weatherForecastURL.replace(/<LONGITUDE>/, String(longitude));
     weatherForecastURL = weatherForecastURL.replace(/<APIKEY>/, WUNDERGROUND_APIKEY);
-    
-    var dateObject = new Date(new Date().getTime() + TIMEZONE_OFFSET * 3600 * 1000); // Yes, kinda sketchy, but gets current time zone with offset
-                                                    //  offset (-12-12) (seconds in hr) * (1000) -> milliseconds
-    var todayDate = dateObject.getDate();           //gets the day of month
-    var dayOfWeek = dateObject.getDay();            //gets the day of week 0-6
-    var requestDate;
-            
-    //assigning day of week to each possible requested date string
-    if(date == "tomorrow"){
-        requestDate = (dayOfWeek + 1) % 7;
-    }
-    if(date == "today"){
-        requestDate = dayOfWeek;
-    }
-    if(date == "Sunday"){
-        requestDate = 0;
-    }
-    if(date == "Monday"){
-        requestDate = 1;
-    }
-    if(date == "Tuesday"){
-        requestDate = 2;
-    }
-    if(date == "Wednesday"){
-        requestDate = 3;
-    }
-    if(date == "Thursday"){
-        requestDate = 4;
-    }
-    if(date == "Friday"){
-        requestDate = 5;
-    }
-    if(date == "Saturday"){
-        requestDate = 6;
-    }
-    console.log(requestDate);
-
-    //calculating the date difference of the week 
-    var dateDiff;
-    if (requestDate != null) {
-        // Find the difference b/w days
-        dateDiff = requestDate - dayOfWeek;
-        if (dateDiff < 0)
-            dateDiff += 7;
-    } else
-        console.log("requestDate is null: line ~231")
-
-    //calculating the day that the user wants to schedule an activity
-    var newDate = dateDiff + todayDate;
 
     console.log(weatherForecastURL);
     
